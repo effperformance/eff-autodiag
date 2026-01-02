@@ -1,117 +1,127 @@
-// app/api/diagnosticar/route.ts
 import OpenAI from "openai";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Body = {
-  dtc?: string;
-  sintoma?: string;
-  vehiculo?: string;
-  notas?: string;
-  nivel?: "normal" | "pro" | "max";
-};
+/* =========================
+   Cliente OpenAI
+========================= */
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-function jsonError(status: number, message: string, detalle?: any) {
+/* =========================
+   Utilidad de error estándar
+========================= */
+function errorResponse(
+  status: number,
+  message: string,
+  detail?: string
+) {
   return NextResponse.json(
     {
       ok: false,
       httpStatus: status,
       message,
-      detalle,
+      detalle: detail ?? null,
       timestamp: new Date().toISOString(),
     },
     { status }
   );
 }
 
-export async function POST(req: NextRequest) {
+/* =========================
+   POST /api/diagnosticar
+========================= */
+export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as Body;
-
-    const dtc = (body.dtc ?? "").trim();
-    const sintoma = (body.sintoma ?? "").trim();
-    const vehiculo = (body.vehiculo ?? "").trim();
-    const notas = (body.notas ?? "").trim();
-    const nivel = body.nivel ?? "normal";
-
-    if (!dtc && !sintoma) {
-      return jsonError(400, "Debe proporcionar al menos un código DTC o un síntoma.");
-    }
-
-    // ✅ Importante: leer la key y crear el cliente DENTRO del handler (no arriba)
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return jsonError(
+    /* ---------- Validar API KEY ---------- */
+    if (!process.env.OPENAI_API_KEY) {
+      return errorResponse(
         500,
-        "Falta OPENAI_API_KEY en el servidor (Vercel Environment Variables).",
-        "Configura OPENAI_API_KEY en Vercel y redeploy."
+        "OPENAI_API_KEY no está configurada en el entorno"
       );
     }
 
-    const client = new OpenAI({ apiKey });
+    /* ---------- Leer body ---------- */
+    const body = await req.json();
 
-    const detalleTexto =
-      nivel === "max"
-        ? "muy detallada, técnica, con pruebas eléctricas/valores típicos, y pasos avanzados"
-        : nivel === "pro"
-        ? "detallada, profesional, con pasos y decisiones claras"
-        : "balanceada, clara y práctica";
+    const {
+      codigoDTC,
+      sintoma,
+      vehiculo,
+      notas,
+      nivelDetalle = "normal",
+    } = body ?? {};
 
-    const input = `
-Eres un técnico automotriz master y asesor de diagnóstico.
-Responde en ESPAÑOL, en formato profesional, y de forma ${detalleTexto}.
+    if (!codigoDTC && !sintoma) {
+      return errorResponse(
+        400,
+        "Debe proporcionar al menos un código DTC o un síntoma"
+      );
+    }
 
-Datos del caso:
-- DTC: ${dtc || "(no provisto)"}
-- Síntoma: ${sintoma || "(no provisto)"}
-- Vehículo: ${vehiculo || "(no provisto)"}
-- Notas: ${notas || "(no provisto)"}
+    /* ---------- Prompt ---------- */
+    const prompt = `
+Eres un mecánico automotriz experto.
 
-Entrega:
-1) Interpretación del DTC/Síntoma (qué significa y qué NO significa).
-2) Causas probables (ordenadas por probabilidad).
-3) Pruebas rápidas (5–10 min) para confirmar/descartar.
-4) Diagnóstico paso a paso (árbol de decisión si aplica).
-5) Valores/lecturas esperadas (si aplica: voltajes, ohms, fuel trims, etc).
-6) Errores comunes / trampas.
-7) Reparaciones sugeridas y cómo validar la reparación.
-8) Si falta información, lista EXACTA de preguntas para cerrar el diagnóstico.
+Analiza el siguiente caso y responde de forma profesional:
 
-No inventes datos del vehículo; si falta, asume genérico y dilo.
-`.trim();
+Código DTC: ${codigoDTC || "No especificado"}
+Síntoma: ${sintoma || "No especificado"}
+Vehículo: ${vehiculo || "No especificado"}
+Notas adicionales: ${notas || "Ninguna"}
 
-    // ✅ Responses API (SDK oficial)
-    const response = await client.responses.create({
+Nivel de detalle: ${nivelDetalle}
+
+Incluye:
+- Posibles causas (ordenadas por probabilidad)
+- Pruebas recomendadas
+- Errores comunes
+- Recomendaciones de reparación
+- Advertencias de seguridad
+`;
+
+    /* ---------- Llamada a OpenAI ---------- */
+    const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      input,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Responde como un técnico automotriz profesional, claro y estructurado.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0.3,
     });
 
-    const text = (response as any).output_text ?? "";
+    const respuesta = completion.choices[0]?.message?.content;
 
+    if (!respuesta) {
+      return errorResponse(
+        500,
+        "La IA no devolvió una respuesta válida"
+      );
+    }
+
+    /* ---------- OK ---------- */
     return NextResponse.json({
       ok: true,
-      httpStatus: 200,
+      respuesta,
       timestamp: new Date().toISOString(),
-      data: {
-        dtc,
-        sintoma,
-        vehiculo,
-        nivel,
-        respuesta: text,
-      },
-      raw: response,
     });
   } catch (err: any) {
-    return jsonError(500, "Error interno en /api/diagnosticar", err?.message ?? err);
-  }
-}
+    console.error("ERROR /api/diagnosticar:", err);
 
-// (Opcional) Para probar rápido en el browser sin frontend
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    message: "API lista. Usa POST con JSON { dtc, sintoma, vehiculo, notas, nivel }",
-  });
+    return errorResponse(
+      500,
+      "Error interno en /api/diagnosticar",
+      err?.message ?? String(err)
+    );
+  }
 }
