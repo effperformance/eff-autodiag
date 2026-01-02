@@ -1,18 +1,11 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /* =========================
-   Cliente OpenAI
-========================= */
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-/* =========================
-   Utilidad de error estándar
+   Helpers
 ========================= */
 function errorResponse(
   status: number,
@@ -24,7 +17,7 @@ function errorResponse(
       ok: false,
       httpStatus: status,
       message,
-      detalle: detail ?? null,
+      detail,
       timestamp: new Date().toISOString(),
     },
     { status }
@@ -32,96 +25,66 @@ function errorResponse(
 }
 
 /* =========================
-   POST /api/diagnosticar
+   API Handler
 ========================= */
 export async function POST(req: Request) {
   try {
-    /* ---------- Validar API KEY ---------- */
-    if (!process.env.OPENAI_API_KEY) {
-      return errorResponse(
-        500,
-        "OPENAI_API_KEY no está configurada en el entorno"
-      );
-    }
-
-    /* ---------- Leer body ---------- */
     const body = await req.json();
+    const { dtc, sintoma, vehiculo, notas, nivelDetalle } = body;
 
-    const {
-      codigoDTC,
-      sintoma,
-      vehiculo,
-      notas,
-      nivelDetalle = "normal",
-    } = body ?? {};
-
-    if (!codigoDTC && !sintoma) {
+    if (!dtc && !sintoma) {
       return errorResponse(
         400,
         "Debe proporcionar al menos un código DTC o un síntoma"
       );
     }
 
-    /* ---------- Prompt ---------- */
-    const prompt = `
-Eres un mecánico automotriz experto.
-
-Analiza el siguiente caso y responde de forma profesional:
-
-Código DTC: ${codigoDTC || "No especificado"}
-Síntoma: ${sintoma || "No especificado"}
-Vehículo: ${vehiculo || "No especificado"}
-Notas adicionales: ${notas || "Ninguna"}
-
-Nivel de detalle: ${nivelDetalle}
-
-Incluye:
-- Posibles causas (ordenadas por probabilidad)
-- Pruebas recomendadas
-- Errores comunes
-- Recomendaciones de reparación
-- Advertencias de seguridad
-`;
-
-    /* ---------- Llamada a OpenAI ---------- */
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "Responde como un técnico automotriz profesional, claro y estructurado.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.3,
-    });
-
-    const respuesta = completion.choices[0]?.message?.content;
-
-    if (!respuesta) {
+    // 🔑 Crear OpenAI AQUÍ (runtime, no build)
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
       return errorResponse(
         500,
-        "La IA no devolvió una respuesta válida"
+        "OPENAI_API_KEY no está definida en el entorno"
       );
     }
 
-    /* ---------- OK ---------- */
+    const client = new OpenAI({ apiKey });
+
+    const prompt = `
+Eres un técnico automotriz profesional.
+
+Datos:
+- Código DTC: ${dtc || "N/A"}
+- Síntoma: ${sintoma || "N/A"}
+- Vehículo: ${vehiculo || "N/A"}
+- Notas: ${notas || "N/A"}
+- Nivel de detalle: ${nivelDetalle || "normal"}
+
+Entrega:
+1. Posibles causas (ordenadas)
+2. Pruebas recomendadas
+3. Reparaciones probables
+4. Advertencias importantes
+`;
+
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Eres un experto en diagnóstico automotriz." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.4,
+    });
+
     return NextResponse.json({
       ok: true,
-      respuesta,
-      timestamp: new Date().toISOString(),
+      result: completion.choices[0].message.content,
     });
   } catch (err: any) {
-    console.error("ERROR /api/diagnosticar:", err);
-
     return errorResponse(
       500,
       "Error interno en /api/diagnosticar",
-      err?.message ?? String(err)
+      err?.message || String(err)
     );
   }
 }
