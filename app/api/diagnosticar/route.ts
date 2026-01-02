@@ -1,10 +1,8 @@
-export const dynamic = "force-dynamic"; 
-export const runtime = "nodejs";
-
-import OpenAI from "openai";
+import { OpenAI } from "openai";
 import { NextResponse } from "next/server";
 
-
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
