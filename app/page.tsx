@@ -353,21 +353,43 @@ export default function Home() {
 
   const canRun = codigo.trim().length > 0 && sintoma.trim().length > 0;
 
-  return (
-    <main
-      style={{
-        padding: 18,
-        fontFamily: "Arial, sans-serif",
-        maxWidth: 1050,
-        margin: "0 auto",
-        color: "#111",
-      }}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+  
+    return (
+      <main style={{ padding: 40, maxWidth: 980, margin: "0 auto" }}>
+    <header className="card" style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+      <img
+        src="/logo.png"
+        alt="EFF Performance Engineering"
+        style={{ height: 56, width: "auto", borderRadius: 10 }}
+      />
+
+      <div style={{ lineHeight: 1.1 }}>
+        <h1 style={{ margin: 0, fontSize: 30 }}>EFF AutoDiag</h1>
+        <p className="muted" style={{ margin: 6, marginLeft: 0 }}>
+          Frontend → API → Response (Professional Mode)
+        </p>
+      </div>
+    </header>
+
+    {/* ✅ AQUÍ VA TODO EL RESTO DE TU UI (inputs, botones, resultados, etc.) */}
+
+
+      
         <div>
-          <h1 style={{ margin: 0, fontSize: 28 }}>EFF AutoDiag</h1>
-          <p style={{ margin: "6px 0 0", color: "#555" }}>Frontend → API → Respuesta (modo profesional)</p>
+          <<header style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+  <img
+    src="/logo.png"
+    alt="EFF Performance Engineering"
+    style={{ height: 60, width: "auto", borderRadius: 8 }}
+  />
+
+  <div>
+    <h1 style={{ margin: 0, fontSize: 32 }}>EFF AutoDiag</h1>
+    <p style={{ margin: 0, opacity: 0.8 }}>Frontend → API → Response (Professional Mode)</p>
+  </div>
+</header>
+
+          <
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
